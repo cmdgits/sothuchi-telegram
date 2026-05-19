@@ -2,7 +2,7 @@
 const TOKEN = `<BOT TOKEN>`; 
 const BASE_URL = `https://api.telegram.org/bot${TOKEN}`;
 const CHAT_ID = '<CHATID>';
-const DEPLOYED_URL = '<LINK APP GOOGLE SHEET DEPLOD APP>';
+const DEPLOYED_URL = '<Copy đường link DEPLOYED_URL>';
 
 const METHODS = { SEND_MESSAGE: 'sendMessage', SET_WEBHOOK: 'setWebhook' }
 
