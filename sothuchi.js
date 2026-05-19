@@ -1,31 +1,21 @@
 // Constants
-const TOKEN = `<Bot TOKEN>`; 
+const TOKEN = ``; 
 const BASE_URL = `https://api.telegram.org/bot${TOKEN}`;
-const CHAT_ID = '<CHAT_ID>';
-const DEPLOYED_URL = '<Link URL>';
+const CHAT_ID = '';
+const DEPLOYED_URL = '';
 
-const METHODS = { SEND_MESSAGE: 'sendMessage', SET_WEBHOOK: 'setWebhook' }
+// THÊM METHOD SEND_PHOTO ĐỂ GỬI ẢNH
+const METHODS = { SEND_MESSAGE: 'sendMessage', SET_WEBHOOK: 'setWebhook', SEND_PHOTO: 'sendPhoto' }
 
-// --- TỪ ĐIỂN DỊCH HASHTAG SANG TIẾNG VIỆT CÓ DẤU ---
-// Bạn có thể tự thêm các danh mục của bạn vào đây
 const CATEGORY_MAP = {
-  "anuong": "Ăn uống",
-  "dilai": "Đi lại",
-  "nhacua": "Nhà cửa",
-  "diennuoc": "Điện nước",
-  "giaitri": "Giải trí",
-  "muasam": "Mua sắm",
-  "suckhoe": "Sức khoẻ",
-  "hochanh": "Học hành",
-  "luong": "Tiền lương",
-  "khac": "Khác",
-  "Khác": "Khác"
+  "anuong": "Ăn uống", "dilai": "Đi lại", "nhacua": "Nhà cửa",
+  "diennuoc": "Điện nước", "giaitri": "Giải trí", "muasam": "Mua sắm",
+  "suckhoe": "Sức khoẻ", "hochanh": "Học hành", "luong": "Tiền lương",
+  "khac": "Khác", "Khác": "Khác"
 };
 
-// Hàm phụ trợ để dịch hashtag
 const getDisplayCategory = (rawCat) => {
   const cleanCat = rawCat.toLowerCase();
-  // Nếu có trong từ điển thì lấy ra, nếu không có thì viết hoa chữ cái đầu
   return CATEGORY_MAP[cleanCat] || (rawCat.charAt(0).toUpperCase() + rawCat.slice(1));
 }
 
@@ -41,6 +31,8 @@ const makeRequest = async (method, queryParams = {}) => {
 }
 const sendMessage = (text) => makeRequest(METHODS.SEND_MESSAGE, { chat_id: CHAT_ID, text })
 const setWebhook = () => makeRequest(METHODS.SET_WEBHOOK,{ url: DEPLOYED_URL })
+// HÀM MỚI: Gửi ảnh
+const sendPhoto = (photoUrl, caption) => makeRequest(METHODS.SEND_PHOTO, { chat_id: CHAT_ID, photo: photoUrl, caption: caption })
 
 // --- BỘ NHỚ NGẦM ---
 const getMonthlyBudget = () => {
@@ -48,7 +40,6 @@ const getMonthlyBudget = () => {
   const savedBudget = scriptProperties.getProperty('MONTHLY_BUDGET');
   return savedBudget ? Number(savedBudget) : 10000000; 
 }
-
 const setMonthlyBudget = (amount) => {
   const scriptProperties = PropertiesService.getScriptProperties();
   scriptProperties.setProperty('MONTHLY_BUDGET', amount.toString());
@@ -91,17 +82,10 @@ const addNewRow = (data) => {
 const deleteRow = (type, rowNumber = null) => {
   const sheet = getSheet(type);
   const lastRow = getActualLastRow(sheet); 
-  
   if (rowNumber !== null) {
-    if (rowNumber > 1 && rowNumber <= lastRow) {
-      sheet.deleteRow(rowNumber);
-      return true;
-    }
+    if (rowNumber > 1 && rowNumber <= lastRow) { sheet.deleteRow(rowNumber); return true; }
   } else {
-    if (lastRow > 1) { 
-      sheet.deleteRow(lastRow);
-      return true;
-    }
+    if (lastRow > 1) { sheet.deleteRow(lastRow); return true; }
   }
   return false;
 }
@@ -109,7 +93,6 @@ const deleteRow = (type, rowNumber = null) => {
 const editLastRow = (data) => {
   const sheet = getSheet(data[3]);
   const lastRow = getActualLastRow(sheet); 
-  
   if (lastRow > 1) {
     sheet.getRange(lastRow, 1, 1, 4).setValues([[data[0], data[1], data[2], data[4]]]);
     return true;
@@ -129,18 +112,11 @@ const getMultiplyBase = (unitLabel) => {
 
 const parseTransactionData = (text) => {
   let type = "Chi";
-  if (text.startsWith('+')) {
-    type = "Thu";
-    text = text.substring(1).trim(); 
-  }
+  if (text.startsWith('+')) { type = "Thu"; text = text.substring(1).trim(); }
   
   let category = "Khác"; 
   const hashtagMatch = text.match(/#([\wÀ-ỹ]+)/); 
-  
-  if (hashtagMatch) {
-    category = hashtagMatch[1]; 
-    text = text.replace(/#([\wÀ-ỹ]+)/, '').trim(); 
-  }
+  if (hashtagMatch) { category = hashtagMatch[1]; text = text.replace(/#([\wÀ-ỹ]+)/, '').trim(); }
   
   const match = text.match(/^(.*?)\s*(\d+)\s*([a-zA-ZÀ-ỹ]*)$/);
   if (!match) throw new Error("⚠️ Sai cú pháp! Vui lòng nhập câu có chứa số tiền ở cuối (VD: Cà phê 30k #anuong)");
@@ -244,10 +220,10 @@ const doPost = (request) => {
     
     if (textLower === '/help' || textLower === '/start') {
       let msg = `🤖 HƯỚNG DẪN BOT THU CHI:\n\n`;
-      msg += `📝 GHI CHÉP (Có Hashtag):\n➖ Chi tiêu: Cà phê 30k #anuong\n➖ Đổ xăng 50k #dilai\n➕ Thu nhập: + Lương 10m\n\n`;
+      msg += `📝 GHI CHÉP:\n➖ Chi tiêu: Cà phê 30k #anuong\n➖ Đổ xăng 50k #dilai\n➕ Thu nhập: + Lương 10m\n\n`;
       msg += `⚙️ NGÂN SÁCH:\n➖ /budget: Xem ngân sách\n➖ /budget [số]: Đặt ngân sách\n\n`;
-      msg += `🛠 SỬA / XOÁ:\n➖ /delete: Xoá chi tiêu\n➖ /delete thu: Xoá thu nhập\n➖ /edit [nội dung]: Sửa dòng cuối\n\n`;
-      msg += `📊 BÁO CÁO:\n➖ /report: Xem tháng này\n➖ /report [Ngày/Tháng]: (VD: /report 05/2026)\n➖ /recent: 5 GD gần nhất`;
+      msg += `🛠 SỬA / XOÁ:\n➖ /delete: Xoá chi tiêu\n➖ /edit [nội dung]: Sửa dòng cuối\n\n`;
+      msg += `📊 BÁO CÁO:\n➖ /report: Xem tháng này\n➖ /report [Tháng]: (VD: /report 05/2026)\n➖ /chart: Xem biểu đồ tháng này\n➖ /recent: 5 GD gần nhất`;
       return sendMessage(msg);
     }
 
@@ -265,6 +241,48 @@ const doPost = (request) => {
       return;
     }
 
+    // === HÀM VẼ BIỂU ĐỒ ===
+    if (textLower.startsWith('/chart') || textLower.startsWith('/bieudo')) {
+      const parts = text.split(' ');
+      const searchQuery = parts.length === 1 ? Utilities.formatDate(new Date(), "GMT+7", "MM/yyyy") : parts[1].trim(); 
+      const r = getReports(searchQuery);
+
+      if (Object.keys(r.categoryBreakdown).length === 0) {
+         return sendMessage(`🔎 Không có dữ liệu để vẽ biểu đồ trong tháng: ${searchQuery}`);
+      }
+
+      // Lấy dữ liệu để đẩy vào biểu đồ
+      const labels = [];
+      const dataValues = [];
+      for (const [cat, amount] of Object.entries(r.categoryBreakdown)) {
+          labels.push(getDisplayCategory(cat)); // Tên tiếng Việt
+          dataValues.push(amount);              // Số tiền
+      }
+
+      // Cấu hình vẽ Pie Chart bằng QuickChart
+      const chartConfig = {
+        type: 'doughnut', // Biểu đồ tròn dạng vòng (đẹp hơn dạng đặc)
+        data: {
+          labels: labels,
+          datasets: [{ data: dataValues }]
+        },
+        options: {
+          plugins: {
+            datalabels: { color: '#ffffff', font: { size: 14, weight: 'bold' } },
+            legend: { position: 'right', labels: { fontSize: 16 } },
+            title: { display: true, text: `Phân bổ chi tiêu - ${searchQuery}`, fontSize: 20 }
+          }
+        }
+      };
+
+      // Đóng gói cấu hình thành 1 đường link URL
+      const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=600&h=400`;
+      
+      // Gửi hình ảnh trực tiếp lên Telegram
+      return sendPhoto(chartUrl, `📊 Biểu đồ chi tiêu: ${searchQuery}\n(Nhập /report để xem chi tiết)`);
+    }
+
+    // (Giữ nguyên /report cũ)
     if (textLower.startsWith('/report') || textLower.startsWith('/baocao')) {
       const parts = text.split(' ');
       const searchQuery = parts.length === 1 ? Utilities.formatDate(new Date(), "GMT+7", "MM/yyyy") : parts[1].trim(); 
@@ -278,7 +296,6 @@ const doPost = (request) => {
           else {
              chiList.forEach(row => {
                 const timeOnly = getFormattedDateString(row[0]).split(' ')[1].substring(0, 5); 
-                // Sử dụng hàm getDisplayCategory để hiển thị tên đẹp
                 const displayCat = getDisplayCategory(row[4]);
                 msg += `${timeOnly} 🔴 [${displayCat}] ${row[1]}: ${formatVND(Number(row[2]))}\n`;
             });
@@ -290,7 +307,6 @@ const doPost = (request) => {
           if (Object.keys(r.categoryBreakdown).length > 0) {
              msg += `🏷 PHÂN LOẠI CHI TIÊU:\n`;
              for (const [cat, amount] of Object.entries(r.categoryBreakdown)) {
-                 // Dịch chữ hashtag sang Tiếng Việt có dấu, không còn dấu #
                  const displayCat = getDisplayCategory(cat);
                  msg += `▫️ ${displayCat}: ${formatVND(amount)}\n`;
              }
@@ -301,7 +317,7 @@ const doPost = (request) => {
           r.searchResults.forEach(row => {
               const typeIcon = row[3] === "Thu" ? "🟢" : "🔴";
               const dateParts = getFormattedDateString(row[0]).split(' ');
-              const displayCat = getDisplayCategory(row[4]); // Dịch hashtag
+              const displayCat = getDisplayCategory(row[4]); 
               const catTag = row[3] === "Chi" ? `[${displayCat}] ` : "";
               msg += `${dateParts[0].substring(0, 5)} ${dateParts[1].substring(0, 5)} ${typeIcon} ${catTag}${row[1]}: ${formatVND(Number(row[2]))}\n`;
           });
@@ -314,7 +330,7 @@ const doPost = (request) => {
       let msg = `🕒 5 GIAO DỊCH GẦN NHẤT:\n\n`;
       if(data.length === 0) return sendMessage("Chưa có giao dịch nào!");
       data.forEach(row => {
-        const displayCat = getDisplayCategory(row[4]); // Dịch hashtag
+        const displayCat = getDisplayCategory(row[4]); 
         const catTag = row[3] === "Chi" ? `[${displayCat}] ` : "";
         msg += `${row[3] === "Thu" ? "🟢" : "🔴"} ${catTag}${row[1]}: ${formatVND(Number(row[2]))}\n`
       });
@@ -346,7 +362,7 @@ const doPost = (request) => {
     SpreadsheetApp.flush();
     
     const reports = getReports();
-    const displayCat = getDisplayCategory(data[4]); // Dịch hashtag
+    const displayCat = getDisplayCategory(data[4]); 
     let msg = `✅ Đã lưu: [${displayCat}] ${data[1]} (${formatVND(data[2])})`;
     if (data[3] === "Chi") {
       const currentBudget = getMonthlyBudget(); 
