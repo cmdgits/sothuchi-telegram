@@ -1,10 +1,33 @@
 // Constants
-const TOKEN = `<BOT TOKEN>`; 
+const TOKEN = `<Bot TOKEN>`; 
 const BASE_URL = `https://api.telegram.org/bot${TOKEN}`;
-const CHAT_ID = '<CHATID>';
-const DEPLOYED_URL = '<Copy đường link DEPLOYED_URL>';
+const CHAT_ID = '<CHAT_ID>';
+const DEPLOYED_URL = '<Link URL>';
 
 const METHODS = { SEND_MESSAGE: 'sendMessage', SET_WEBHOOK: 'setWebhook' }
+
+// --- TỪ ĐIỂN DỊCH HASHTAG SANG TIẾNG VIỆT CÓ DẤU ---
+// Bạn có thể tự thêm các danh mục của bạn vào đây
+const CATEGORY_MAP = {
+  "anuong": "Ăn uống",
+  "dilai": "Đi lại",
+  "nhacua": "Nhà cửa",
+  "diennuoc": "Điện nước",
+  "giaitri": "Giải trí",
+  "muasam": "Mua sắm",
+  "suckhoe": "Sức khoẻ",
+  "hochanh": "Học hành",
+  "luong": "Tiền lương",
+  "khac": "Khác",
+  "Khác": "Khác"
+};
+
+// Hàm phụ trợ để dịch hashtag
+const getDisplayCategory = (rawCat) => {
+  const cleanCat = rawCat.toLowerCase();
+  // Nếu có trong từ điển thì lấy ra, nếu không có thì viết hoa chữ cái đầu
+  return CATEGORY_MAP[cleanCat] || (rawCat.charAt(0).toUpperCase() + rawCat.slice(1));
+}
 
 // Utils
 const toQueryParamsString = (obj) => Object.keys(obj).map(key => `${encodeURIComponent(key)}=${encodeURIComponent(obj[key])}`).join('&');
@@ -19,11 +42,11 @@ const makeRequest = async (method, queryParams = {}) => {
 const sendMessage = (text) => makeRequest(METHODS.SEND_MESSAGE, { chat_id: CHAT_ID, text })
 const setWebhook = () => makeRequest(METHODS.SET_WEBHOOK,{ url: DEPLOYED_URL })
 
-// --- BỘ NHỚ NGẦM (THAY THẾ TAB CÀI ĐẶT) ---
+// --- BỘ NHỚ NGẦM ---
 const getMonthlyBudget = () => {
   const scriptProperties = PropertiesService.getScriptProperties();
   const savedBudget = scriptProperties.getProperty('MONTHLY_BUDGET');
-  return savedBudget ? Number(savedBudget) : 10000000; // Mặc định 10 triệu nếu chưa cài
+  return savedBudget ? Number(savedBudget) : 10000000; 
 }
 
 const setMonthlyBudget = (amount) => {
@@ -31,7 +54,7 @@ const setMonthlyBudget = (amount) => {
   scriptProperties.setProperty('MONTHLY_BUDGET', amount.toString());
 }
 
-// --- QUẢN LÝ GOOGLE SHEET (CHỈ CÒN 2 TABS) ---
+// --- QUẢN LÝ GOOGLE SHEET ---
 const getSheet = (type) => {
   const sheetName = type === 'Thu' ? 'ThuNhap' : 'ChiTieu';
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -41,21 +64,33 @@ const getSheet = (type) => {
   
   if (sheet.getLastRow() === 0) {
     const tenKhoan = type === 'Thu' ? "Tên Khoản Thu" : "Tên Khoản Chi";
-    sheet.appendRow(["Thời gian", tenKhoan, "Số tiền (VND)"]);
-    sheet.getRange("A1:C1").setFontWeight("bold").setBackground("#e0e0e0");
+    sheet.appendRow(["Thời gian", tenKhoan, "Số tiền (VND)", "Phân loại"]);
+    sheet.getRange("A1:D1").setFontWeight("bold").setBackground("#e0e0e0");
+  } else {
+    if (sheet.getRange("D1").getValue() === "") {
+        sheet.getRange("D1").setValue("Phân loại").setFontWeight("bold").setBackground("#e0e0e0");
+    }
   }
   return sheet;
 }
 
+const getActualLastRow = (sheet) => {
+  const data = sheet.getRange("A:A").getValues();
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i][0] !== "" && data[i][0] !== null) return i + 1;
+  }
+  return 1; 
+}
+
 const addNewRow = (data) => {
   const sheet = getSheet(data[3]); 
-  const lastRow = sheet.getLastRow(); 
-  sheet.getRange(lastRow + 1, 1, 1, 3).setValues([[data[0], data[1], data[2]]]); 
+  const lastRow = getActualLastRow(sheet); 
+  sheet.getRange(lastRow + 1, 1, 1, 4).setValues([[data[0], data[1], data[2], data[4]]]); 
 }
 
 const deleteRow = (type, rowNumber = null) => {
   const sheet = getSheet(type);
-  const lastRow = sheet.getLastRow();
+  const lastRow = getActualLastRow(sheet); 
   
   if (rowNumber !== null) {
     if (rowNumber > 1 && rowNumber <= lastRow) {
@@ -73,10 +108,10 @@ const deleteRow = (type, rowNumber = null) => {
 
 const editLastRow = (data) => {
   const sheet = getSheet(data[3]);
-  const lastRow = sheet.getLastRow();
+  const lastRow = getActualLastRow(sheet); 
   
   if (lastRow > 1) {
-    sheet.getRange(lastRow, 1, 1, 3).setValues([[data[0], data[1], data[2]]]);
+    sheet.getRange(lastRow, 1, 1, 4).setValues([[data[0], data[1], data[2], data[4]]]);
     return true;
   }
   return false;
@@ -99,17 +134,32 @@ const parseTransactionData = (text) => {
     text = text.substring(1).trim(); 
   }
   
-  const match = text.match(/^(.*?)\s*(\d+)\s*(.*)$/);
-  if (!match) throw new Error("⚠️ Sai cú pháp! Vui lòng nhập có số tiền (VD: Cafe 30k hoặc + Lương 10m)");
+  let category = "Khác"; 
+  const hashtagMatch = text.match(/#([\wÀ-ỹ]+)/); 
+  
+  if (hashtagMatch) {
+    category = hashtagMatch[1]; 
+    text = text.replace(/#([\wÀ-ỹ]+)/, '').trim(); 
+  }
+  
+  const match = text.match(/^(.*?)\s*(\d+)\s*([a-zA-ZÀ-ỹ]*)$/);
+  if (!match) throw new Error("⚠️ Sai cú pháp! Vui lòng nhập câu có chứa số tiền ở cuối (VD: Cà phê 30k #anuong)");
 
-  const label = match[1].trim();
-  const priceText = match[2];
-  const unitLabel = match[3].trim();
+  const label = match[1].trim();       
+  const priceText = match[2];          
+  const unitLabel = match[3].trim();   
+  
+  let multiplyBase = getMultiplyBase(unitLabel);
+  const unitLower = unitLabel.toLowerCase();
+  
+  if (priceText.length >= 6 && (unitLower === 'k' || unitLower === 'nghìn' || unitLower === 'ngàn' || unitLower === 'ng')) {
+    multiplyBase = 1; 
+  }
   
   const time = Utilities.formatDate(new Date(), "GMT+7", "dd/MM/yyyy HH:mm:ss");
-  const price = Number(priceText) * getMultiplyBase(unitLabel);
+  const price = Number(priceText) * multiplyBase;
   
-  return [time, label, price, type]; 
+  return [time, label, price, type, category]; 
 }
 
 const parseDateString = (input) => {
@@ -132,24 +182,24 @@ const getFormattedDateString = (sheetDateValue) => {
   return sheetDateValue.toString();
 }
 
-// Lấy Báo Cáo có tuỳ chọn tìm kiếm
+// Lấy Báo Cáo
 const getReports = (searchQuery = null) => {
   let totalChi = 0, totalThu = 0;
   let searchTotalChi = 0, searchTotalThu = 0;
-  
   let currentMonthChi = 0; 
   const currentMonthStr = Utilities.formatDate(new Date(), "GMT+7", "MM/yyyy");
   
   let combinedData = [];
   let searchResults = []; 
+  let categoryBreakdown = {}; 
 
-  // Xử lý Tab Chi
   const sheetChi = getSheet('Chi');
   const dataChi = sheetChi.getDataRange().getValues();
   for (let i = 1; i < dataChi.length; i++) { 
     if (!dataChi[i][0]) continue;
     const price = Number(dataChi[i][2]) || 0;
     const dateStr = getFormattedDateString(dataChi[i][0]);
+    const cat = dataChi[i][3] || "Khác"; 
     
     totalChi += price;
     if (dateStr.includes(currentMonthStr)) currentMonthChi += price;
@@ -157,42 +207,34 @@ const getReports = (searchQuery = null) => {
     if (searchQuery && dateStr.includes(searchQuery)) {
         searchTotalChi += price;
         searchResults.push([...dataChi[i], 'Chi']);
+        categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + price;
     }
-    
     combinedData.push([...dataChi[i], 'Chi']);
   }
 
-  // Xử lý Tab Thu
   const sheetThu = getSheet('Thu');
   const dataThu = sheetThu.getDataRange().getValues();
   for (let i = 1; i < dataThu.length; i++) {
     if (!dataThu[i][0]) continue;
     const price = Number(dataThu[i][2]) || 0;
     const dateStr = getFormattedDateString(dataThu[i][0]);
-    
     totalThu += price;
-    
     if (searchQuery && dateStr.includes(searchQuery)) {
         searchTotalThu += price;
         searchResults.push([...dataThu[i], 'Thu']); 
     }
-    
     combinedData.push([...dataThu[i], 'Thu']);
   }
   
   combinedData.sort((a,b) => parseDateString(a[0]) - parseDateString(b[0]));
   searchResults.sort((a,b) => parseDateString(a[0]) - parseDateString(b[0]));
-  
   const balance = totalThu - totalChi; 
   
-  return { 
-      balance, totalThu, totalChi, combinedData, currentMonthChi,
-      searchTotalChi, searchTotalThu, searchResults 
-  };
+  return { balance, totalThu, totalChi, combinedData, currentMonthChi, searchTotalChi, searchTotalThu, searchResults, categoryBreakdown };
 }
 
 // Webhooks
-const doPost = (request) =>{
+const doPost = (request) => {
   try {
     const contents = JSON.parse(request.postData.contents);
     if (!contents.message || !contents.message.text) return;
@@ -202,10 +244,10 @@ const doPost = (request) =>{
     
     if (textLower === '/help' || textLower === '/start') {
       let msg = `🤖 HƯỚNG DẪN BOT THU CHI:\n\n`;
-      msg += `📝 GHI CHÉP:\n➖ Chi tiêu: Cà phê 30k\n➕ Thu nhập: + Lương 10m\n\n`;
+      msg += `📝 GHI CHÉP (Có Hashtag):\n➖ Chi tiêu: Cà phê 30k #anuong\n➖ Đổ xăng 50k #dilai\n➕ Thu nhập: + Lương 10m\n\n`;
       msg += `⚙️ NGÂN SÁCH:\n➖ /budget: Xem ngân sách\n➖ /budget [số]: Đặt ngân sách\n\n`;
       msg += `🛠 SỬA / XOÁ:\n➖ /delete: Xoá chi tiêu\n➖ /delete thu: Xoá thu nhập\n➖ /edit [nội dung]: Sửa dòng cuối\n\n`;
-      msg += `📊 BÁO CÁO:\n➖ /report: Xem tháng này\n➖ /report [Ngày]: (VD: /report 15/05/2026)\n➖ /report [Tháng]: (VD: /report 04/2026)\n➖ /recent: 5 GD gần nhất`;
+      msg += `📊 BÁO CÁO:\n➖ /report: Xem tháng này\n➖ /report [Ngày/Tháng]: (VD: /report 05/2026)\n➖ /recent: 5 GD gần nhất`;
       return sendMessage(msg);
     }
 
@@ -216,68 +258,54 @@ const doPost = (request) =>{
         const regex = /(\d+)\s*(.*)/g;
         const newBudget = Number(input.replace(regex, '$1')) * getMultiplyBase(input.replace(regex, '$2').trim());
         if (newBudget > 0) {
-          setMonthlyBudget(newBudget); // Lưu vào bộ nhớ ngầm
+          setMonthlyBudget(newBudget); 
           sendMessage(`✅ Ngân sách tháng: ${formatVND(newBudget)}`);
-        } else {
-          sendMessage(`⚠ Số tiền không hợp lệ!`);
-        }
-      } else {
-        sendMessage(`💡 Ngân sách tháng hiện tại: ${formatVND(getMonthlyBudget())}`);
-      }
+        } else { sendMessage(`⚠ Số tiền không hợp lệ!`); }
+      } else { sendMessage(`💡 Ngân sách tháng hiện tại: ${formatVND(getMonthlyBudget())}`); }
       return;
     }
 
-    // --- XỬ LÝ LỆNH REPORT ---
     if (textLower.startsWith('/report') || textLower.startsWith('/baocao')) {
       const parts = text.split(' ');
-      
-      const searchQuery = parts.length === 1 
-                          ? Utilities.formatDate(new Date(), "GMT+7", "MM/yyyy") 
-                          : parts[1].trim(); 
-                          
+      const searchQuery = parts.length === 1 ? Utilities.formatDate(new Date(), "GMT+7", "MM/yyyy") : parts[1].trim(); 
       const r = getReports(searchQuery);
-      
       let msg = ``;
       
       if (searchQuery.split('/').length === 3) {
-          msg += `📅 NGÀY: ${searchQuery}\n`;
-          msg += `🏦 Số dư ví: ${formatVND(r.balance)}\n`; 
-          msg += `💸 TỔNG CHI: ${formatVND(r.searchTotalChi)}\n`;
-          msg += `──────────────\n`;
-          
+          msg += `📅 NGÀY: ${searchQuery}\n🏦 Số dư ví: ${formatVND(r.balance)}\n💸 TỔNG CHI: ${formatVND(r.searchTotalChi)}\n──────────────\n`;
           const chiList = r.searchResults.filter(row => row[3] === 'Chi');
-          
-          if (chiList.length === 0) {
-             msg += `Không có khoản chi nào trong ngày này.`;
-          } else {
+          if (chiList.length === 0) { msg += `Không có khoản chi nào trong ngày này.`; } 
+          else {
              chiList.forEach(row => {
                 const timeOnly = getFormattedDateString(row[0]).split(' ')[1].substring(0, 5); 
-                msg += `${timeOnly} 🔴 ${row[1]}: ${formatVND(Number(row[2]))}\n`;
+                // Sử dụng hàm getDisplayCategory để hiển thị tên đẹp
+                const displayCat = getDisplayCategory(row[4]);
+                msg += `${timeOnly} 🔴 [${displayCat}] ${row[1]}: ${formatVND(Number(row[2]))}\n`;
             });
           }
-      } 
-      else {
-          if (r.searchResults.length === 0) {
-            return sendMessage(`🔎 Không có giao dịch nào trong tháng: ${searchQuery}`);
+      } else {
+          if (r.searchResults.length === 0) return sendMessage(`🔎 Không có giao dịch nào trong tháng: ${searchQuery}`);
+          msg += `📊 TỔNG KẾT THÁNG: ${searchQuery}\n💰 Tổng Thu: ${formatVND(r.searchTotalThu)}\n💳 Tổng Chi: ${formatVND(r.searchTotalChi)}\n🏦 Số dư ví: ${formatVND(r.balance)}\n──────────────\n`;
+          
+          if (Object.keys(r.categoryBreakdown).length > 0) {
+             msg += `🏷 PHÂN LOẠI CHI TIÊU:\n`;
+             for (const [cat, amount] of Object.entries(r.categoryBreakdown)) {
+                 // Dịch chữ hashtag sang Tiếng Việt có dấu, không còn dấu #
+                 const displayCat = getDisplayCategory(cat);
+                 msg += `▫️ ${displayCat}: ${formatVND(amount)}\n`;
+             }
+             msg += `──────────────\n`;
           }
-          
-          msg += `📊 TỔNG KẾT THÁNG: ${searchQuery}\n`;
-          msg += `💰 Tổng Thu: ${formatVND(r.searchTotalThu)}\n`;
-          msg += `💳 Tổng Chi: ${formatVND(r.searchTotalChi)}\n`;
-          msg += `🏦 Số dư ví: ${formatVND(r.balance)}\n`; 
-          msg += `──────────────\n`;
+
           msg += `📋 CHI TIẾT GIAO DỊCH:\n`;
-          
           r.searchResults.forEach(row => {
               const typeIcon = row[3] === "Thu" ? "🟢" : "🔴";
               const dateParts = getFormattedDateString(row[0]).split(' ');
-              const shortDate = dateParts[0].substring(0, 5); 
-              const shortTime = dateParts[1].substring(0, 5); 
-              
-              msg += `${shortDate} ${shortTime} ${typeIcon} ${row[1]}: ${formatVND(Number(row[2]))}\n`;
+              const displayCat = getDisplayCategory(row[4]); // Dịch hashtag
+              const catTag = row[3] === "Chi" ? `[${displayCat}] ` : "";
+              msg += `${dateParts[0].substring(0, 5)} ${dateParts[1].substring(0, 5)} ${typeIcon} ${catTag}${row[1]}: ${formatVND(Number(row[2]))}\n`;
           });
       }
-      
       return sendMessage(msg);
     }
     
@@ -285,7 +313,11 @@ const doPost = (request) =>{
       const data = getReports().combinedData.slice(-5); 
       let msg = `🕒 5 GIAO DỊCH GẦN NHẤT:\n\n`;
       if(data.length === 0) return sendMessage("Chưa có giao dịch nào!");
-      data.forEach(row => msg += `${row[3] === "Thu" ? "🟢" : "🔴"} ${row[1]}: ${formatVND(Number(row[2]))}\n`);
+      data.forEach(row => {
+        const displayCat = getDisplayCategory(row[4]); // Dịch hashtag
+        const catTag = row[3] === "Chi" ? `[${displayCat}] ` : "";
+        msg += `${row[3] === "Thu" ? "🟢" : "🔴"} ${catTag}${row[1]}: ${formatVND(Number(row[2]))}\n`
+      });
       return sendMessage(msg);
     }
 
@@ -305,27 +337,23 @@ const doPost = (request) =>{
       const data = parseTransactionData(text.substring(6).trim()); 
       const success = editLastRow(data);
       SpreadsheetApp.flush();
-      return sendMessage(success ? `✏️ Đã sửa thành:\n${data[1]} (${formatVND(data[2])})` : `⚠ Không có dữ liệu để sửa!`);
+      const displayCat = getDisplayCategory(data[4]);
+      return sendMessage(success ? `✏️ Đã sửa thành:\n[${displayCat}] ${data[1]} (${formatVND(data[2])})` : `⚠ Không có dữ liệu để sửa!`);
     } 
     
-    // Xử lý nhập Thu/Chi
     const data = parseTransactionData(text);
     addNewRow(data); 
     SpreadsheetApp.flush();
     
     const reports = getReports();
-    let msg = `✅ Đã lưu: ${data[1]} (${formatVND(data[2])})`;
-    
+    const displayCat = getDisplayCategory(data[4]); // Dịch hashtag
+    let msg = `✅ Đã lưu: [${displayCat}] ${data[1]} (${formatVND(data[2])})`;
     if (data[3] === "Chi") {
-      const currentBudget = getMonthlyBudget(); // Lấy từ bộ nhớ ngầm
+      const currentBudget = getMonthlyBudget(); 
       const percent = Math.round((reports.currentMonthChi / currentBudget) * 100);
       if (reports.currentMonthChi > currentBudget) msg += `\n🚨 VƯỢT HẠN MỨC: Tiêu lố ${formatVND(reports.currentMonthChi - currentBudget)}!`;
       else if (percent >= 80) msg += `\n⚠️ CHÚ Ý: Đã dùng ${percent}% ngân sách!`;
     }
-    
     sendMessage(msg);
-
-  } catch (error) {
-    sendMessage(`❌ Bot gặp lỗi: ${error.message}`);
-  }
+  } catch (error) { sendMessage(`❌ Bot gặp lỗi: ${error.message}`); }
 }
